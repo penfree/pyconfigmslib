@@ -1,0 +1,7 @@
+unifiedrpc
+pyyaml
+pymongo
+hiredis
+redis
+elasticsearch
+happybase
