@@ -13,6 +13,8 @@
 
 import logging
 
+from threading import Lock
+
 from redis import StrictRedis
 
 from ..section import ReferConfigSection
@@ -27,19 +29,32 @@ class RedisConfigSection(ReferConfigSection):
     """
     TYPE = 'redis'
 
+    logger = logging.getLogger('config.redis')
+
+    def __reference__(self, config):
+        """Get the referenced value from config
+        """
+        return RedisDatabase(config)
+
+    def __release__(self, value):
+        """Release the referenced mongodb client
+        """
+        value.close()
+
+class RedisDatabase(object):
+    """The redis database
+    """
     DEFAULT_PORT            = 6379      # Default redis port
     DEFAULT_TIMEOUT         = 10 * 1000 # 10s
 
-    logger = logging.getLogger('config.redis')
+    logger = logging.getLogger('config.redis.database')
 
     def __init__(self, config):
-        """Create a new RedisConfigSection
+        """Create a new RedisDatabase
         """
-        # Super
-        super(RedisConfigSection, self).__init__(config)
-        # Create the redis database dict
-        self._dbs = {}      # Key is db number, value is StrictRedis object
-        self._requireUpdate = False
+        self.config = config
+        self._lock = Lock()
+        self._dbs = {}
 
     def __getitem__(self, db):
         """Get a database
@@ -52,40 +67,14 @@ class RedisConfigSection(ReferConfigSection):
                 self._dbs[db] = redis
             return redis
 
-    def __releaseref__(self):
-        """Release the referenced mongodb client
+    def close(self):
+        """Close this database
         """
-        if self._requireUpdate:
-            # Update the dbs
-            oldDBs = self._dbs
-            self._dbs = {}
-            # Close all dbs
-            for db, redis in oldDBs.iteritems():
-                try:
-                    redis.disconnect()
-                except:
-                    self.logger.exception('Failed to disconnect redis for database [%s]', db)
-            # Done
-            self._requireUpdate = False
-
-    def update(self, config):
-        """update the config
-        """
-        with self._lock:
-            if self._refcount == 0:
-                # Replase
-                oldDBs = self._dbs
-                self._dbs = {}
-                for db, redis in oldDBs.iteritems():
-                    try:
-                        redis.disconnect()
-                    except:
-                        self.logger.exception('Failed to disconnect redis for database [%s]', db)
-            else:
-                # Update
-                self._requireUpdate = True
-        # Super
-        super(RedisConfigSection, self).update(config)
+        for db, redis in self._dbs.iteritems():
+            try:
+                redis.disconnect()
+            except:
+                self.logger.exception('Failed to disconnect redis for database [%s], ignore', db)
 
     @classmethod
     def createRedisByConfig(cls, config, db):

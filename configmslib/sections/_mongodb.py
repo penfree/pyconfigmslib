@@ -33,62 +33,15 @@ class MongodbConfigSection(ReferConfigSection):
 
     logger = logging.getLogger('config.mongodb')
 
-    def __init__(self, config):
-        """Create a new MongodbConfigSection
-        """
-        # Super
-        super(MongodbConfigSection, self).__init__(config)
-        # Initialize the mongodb client
-        self._client = self.createClientByConfig(config)
-        self._newClient = None  # The new client
-        # Set
-
-    def __getrefvalue__(self):
+    def __reference__(self, config):
         """Get the referenced mongodb client
         """
-        return self._client
+        return self.createClientByConfig(config)
 
-    def __releaseref__(self):
+    def __release__(self, value):
         """Release the referenced mongodb client
         """
-        if self._newClient:
-            # Replace
-            oldClient = self._client
-            self._client = self._newClient
-            self._newClient = None
-            # Close old client
-            # NOTE:
-            #   Here, we have to close the old client in the lock context
-            #   We could do this in other thread in order to not block other reference request for closing old client, but this will require thread join and hard to do it right
-            if oldClient:
-                try:
-                    oldClient.close()
-                except:
-                    self.logger.exception('Failed to close old mongodb client, ignore')
-
-    def update(self, config):
-        """Update the config
-        """
-        # Create new client
-        newClient = self.createClientByConfig(config)
-        # Replace or not
-        oldClient = None
-        with self._lock:
-            if self._refcount == 0:
-                # Replace
-                oldClient = self._client
-                self._client = newClient
-            else:
-                # Set new client and wait for de-reference
-                self._newClient = newClient
-        # Close oldClient
-        if oldClient:
-            try:
-                oldClient.close()
-            except:
-                self.logger.exception('Failed to close old mongodb client, ignore')
-        # Super
-        super(MongodbConfigSection, self).update(config)
+        value.close()
 
     @classmethod
     def createClientByConfig(cls, config):

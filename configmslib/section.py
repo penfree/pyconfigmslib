@@ -9,7 +9,10 @@
 
 """
 
+import logging
+
 from threading import RLock
+from contextlib import contextmanager
 
 class ConfigSection(object):
     """The config section
@@ -63,39 +66,89 @@ class ConfigSection(object):
 class ReferConfigSection(ConfigSection):
     """The config section which support reference counter
     """
+    logger = logging.getLogger('config.refer')
+
     def __init__(self, config):
         """Create a new ReferConfigSection
         """
+        self._lock = RLock()
+        # Get reference value
+        self._value = ReferencedValue(self.__reference__(config))
         # Super
         super(ReferConfigSection, self).__init__(config)
-        # Set
-        self._lock = RLock()
-        self._refcount = 0
 
-    def __getrefvalue__(self):
+    def __reference__(self, config):
         """Get the current referenced value
         """
-        return self
+        raise NotImplementedError
 
-    def __releaseref__(self):
+    def __release__(self, value):
         """The reference count has decreased to zero, could be released
         """
         pass
 
-    def __enter__(self):
-        """Enter with statement
+    @contextmanager
+    def instance(self):
+        """Get the instance
+        """
+        value = self._value
+        # Increase
+        value.increase()
+        # Yield
+        yield value.value
+        # Decrease
+        value.decrease()
+        # Check
+        if self._value != value and value.notReferenced:
+            # Updated and should be release
+            try:
+                self.__release__(value.value)
+            except:
+                self.logger.exception('Failed to release the referenced value')
+
+    def update(self, config):
+        """Update the config
+        Parameters:
+            config                              The config dict
+        Returns:
+            Nothing
+        """
+        # Create value
+        self._value = ReferencedValue(self.__reference__(config))
+        # Super
+        return super(ReferConfigSection, self).update(config)
+
+class ReferencedValue(object):
+    """The referenced value
+    """
+    def __init__(self, value):
+        """Create a new ReferencedValue object
+        """
+        self._lock = RLock()
+        self._refcount = 0
+        self._value = value
+
+    @property
+    def notReferenced(self):
+        """Tell if current value is not referenced
+        """
+        return self._refcount == 0
+
+    @property
+    def value(self):
+        """The referenced value
+        """
+        return self._value
+
+    def increase(self):
+        """Increase the reference counter
         """
         with self._lock:
             self._refcount += 1
-            return self.__getrefvalue__()
 
-    def __exit__(self, type, value, tb):
-        """Exit with statement
+    def decrease(self):
+        """Decrease the reference counter
         """
         with self._lock:
-            if self._refcount > 0:
-                self._refcount -= 1
-            # Release if no reference
-            if self._refcount == 0:
-                self.__releaseref__()
+            self._refcount -= 1
 

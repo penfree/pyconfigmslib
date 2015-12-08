@@ -33,58 +33,15 @@ class HBaseConfigSection(ReferConfigSection):
 
     logger = logging.getLogger('config.hbase')
 
-    def __init__(self, config):
-        """Create a new HBaseConfigSection
-        """
-        # Super
-        super(HBaseConfigSection, self).__init__(config)
-        # Create the happybase connection
-        self._conn = self.createConnectionByConfig(config)
-        self._newConn = None
-
-    def __getrefvalue__(self):
+    def __reference__(self, config):
         """Get the referenced connection
         """
-        return self._conn
+        return self.createConnectionByConfig(config)
 
-    def __releaseref__(self):
+    def __release__(self, value):
         """Release the reference
         """
-        if self._newConn:
-            # Replace
-            oldConn = self._conn
-            self._conn = self._newConn
-            self._newConn = None
-            # Close old connection
-            if oldConn:
-                try:
-                    oldConn.close()
-                except:
-                    self.logger.exception('Failed to close old hbase connection, ignore')
-
-    def update(self, config):
-        """Update the config
-        """
-        # Create new connection
-        newConn = self.createConnectionByConfig(config)
-        # Replace or not
-        oldConn = None
-        with self._lock:
-            if self._refcount == 0:
-                # Replace
-                oldConn = self._conn
-                self._conn = newConn
-            else:
-                # Set new connection and wait for de-reference
-                self._newConn = newConn
-        # Close old connection
-        if oldConn:
-            try:
-                oldConn.close()
-            except:
-                self.logger.exception('Failed to close old hbase connection, ignore')
-        # Super
-        super(HBaseConfigSection, self).update(config)
+        value.close()
 
     @classmethod
     def createConnectionByConfig(cls, config):
