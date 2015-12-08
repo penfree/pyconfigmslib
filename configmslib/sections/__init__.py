@@ -11,11 +11,13 @@
 
 from _mongodb import MongodbConfigSection
 from _redis import RedisConfigSection
+from _hbase import HBaseConfigSection
 
 SECTIONS = [
         MongodbConfigSection,
-        RedisConfigSection
+        RedisConfigSection,
+        HBaseConfigSection
         ]
 
-__all__ = [ 'SECTIONS', 'MongodbConfigSection', 'RedisConfigSection' ]
+__all__ = [ 'SECTIONS' ]
 
