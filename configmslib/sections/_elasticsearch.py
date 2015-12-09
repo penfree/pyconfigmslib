@@ -45,6 +45,7 @@ class ElasticsearchConfigSection(ReferConfigSection):
         hosts = config['hosts']
         if isinstance(hosts, basestring):
             hosts = (hosts, )
+        cls.logger.info('Connecting to elasticsearch with hosts: %s', hosts)
         # Create the client
         return Elasticsearch(hosts)
 

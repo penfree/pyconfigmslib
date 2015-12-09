@@ -84,6 +84,7 @@ class RedisDatabase(object):
                 config['host'], config.get('port', cls.DEFAULT_PORT), config.get('password'), config.get('timeout', cls.DEFAULT_TIMEOUT)
         if not timeout is None:
             timeout = timeout / 1000.0
+        cls.logger.info('Connecting to redis with host [%s] port [%s]', host, port)
         # Create the redis client
         return StrictRedis(host, port, db, password, timeout)
 

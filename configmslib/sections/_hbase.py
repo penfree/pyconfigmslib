@@ -67,5 +67,6 @@ class HBaseConfigSection(ReferConfigSection):
         if protocol:
             params['protocol'] = protocol
         # Create the connection
+        cls.logger.info('Connecting to hbase with host [%s] port [%s]', host, port or '*')
         return happybase.Connection(**params)
 
