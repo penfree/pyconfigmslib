@@ -9,7 +9,7 @@
 
 """
 
-from __version__ import version
+from __version__ import __version__
 
 from repository import ConfigRepository
 
