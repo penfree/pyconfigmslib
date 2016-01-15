@@ -9,9 +9,9 @@
 
 """
 
-from __version__ import version
+from __version__ import __version__
 
-from repository import ConfigRepository
+from repository import KNOWN_SECTION_TYPES, ConfigRepository
 
-__all__ = [ 'ConfigRepository' ]
+__all__ = [ 'KNOWN_SECTION_TYPES', 'ConfigRepository' ]
 
