@@ -17,10 +17,13 @@ from ..section import ReferConfigSection
 
 esLogger = logging.getLogger('elasticsearch.trace')
 
+DEFAULT_TIMEOUT = 30 * 1000     # 30s
+
 class ElasticsearchConfigSection(ReferConfigSection):
     """The elasticsearch config section
     Known configs:
         - hosts                     (Required)A single host or a list of hosts
+        - timeout                   The timeout in ms
     TODO:
         Add support to transport class and kwargs
     """
@@ -45,7 +48,8 @@ class ElasticsearchConfigSection(ReferConfigSection):
         hosts = config['hosts']
         if isinstance(hosts, basestring):
             hosts = (hosts, )
-        cls.logger.info('Connecting to elasticsearch with hosts: %s', hosts)
+        timeout = config.get('timeout', DEFAULT_TIMEOUT)
+        cls.logger.info('Connecting to elasticsearch with hosts: %s timeout [%s]', hosts, timeout)
         # Create the client
-        return Elasticsearch(hosts)
+        return Elasticsearch(hosts, timeout = float(timeout) / 1000.0)
 
