@@ -87,6 +87,16 @@ class ReferConfigSection(ConfigSection):
         """
         pass
 
+    def __withinerror__(self, error):
+        """When error occurred in the with statements
+        """
+        pass
+
+    def __getinstancevalue__(self, value):
+        """Get the value returned by instance method
+        """
+        yield value.value
+
     @contextmanager
     def instance(self):
         """Get the instance
@@ -94,17 +104,25 @@ class ReferConfigSection(ConfigSection):
         value = self._value
         # Increase
         value.increase()
-        # Yield
-        yield value.value
-        # Decrease
-        value.decrease()
-        # Check
-        if self._value != value and value.notReferenced:
-            # Updated and should be release
-            try:
-                self.__release__(value.value)
-            except:
-                self.logger.exception('Failed to release the referenced value')
+        try:
+            # Yield
+            for instanceValue in self.__getinstancevalue__(value):
+                yield instanceValue
+        except Exception as error:
+            # Run within error
+            self.__withinerror__(error)
+            # Re-raise
+            raise
+        finally:
+            # Decrease
+            value.decrease()
+            # Check
+            if self._value != value and value.notReferenced:
+                # Updated and should be release
+                try:
+                    self.__release__(value.value)
+                except:
+                    self.logger.exception('Failed to release the referenced value')
 
     def update(self, config):
         """Update the config
@@ -151,4 +169,3 @@ class ReferencedValue(object):
         """
         with self._lock:
             self._refcount -= 1
-

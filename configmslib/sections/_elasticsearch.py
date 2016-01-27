@@ -12,8 +12,10 @@
 import logging
 
 from elasticsearch import Elasticsearch
+from elasticsearch.exceptions import TransportError
 
-from ..section import ReferConfigSection
+from configmslib.section import ReferConfigSection
+from configmslib.util import json
 
 esLogger = logging.getLogger('elasticsearch.trace')
 
@@ -41,6 +43,17 @@ class ElasticsearchConfigSection(ReferConfigSection):
         """
         pass
 
+    def __withinerror__(self, error):
+        """When error occurred in the with statements
+        """
+        if isinstance(error, TransportError):
+            # Print the log
+            self.logger.error('Failed to invoke elasitcsearch, error code [%s] message [%s] info [%s]' % (
+                error.status_code,
+                error.error,
+                json.dumps(error.info, ensure_ascii = False) if error.info else ''
+                ))
+
     @classmethod
     def createClientbyConfig(cls, config):
         """Create elasticsearch client by config
@@ -52,4 +65,3 @@ class ElasticsearchConfigSection(ReferConfigSection):
         cls.logger.info('Connecting to elasticsearch with hosts: %s timeout [%s]', hosts, timeout)
         # Create the client
         return Elasticsearch(hosts, timeout = float(timeout) / 1000.0)
-
