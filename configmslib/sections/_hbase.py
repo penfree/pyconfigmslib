@@ -30,6 +30,7 @@ class HBaseConfigSection(ReferConfigSection):
     TYPE = 'hbase'
 
     DEFAULT_TIMEOUT = 10 * 1000         # 10s
+    DEFAULT_POOL_SIZE = 3
 
     logger = logging.getLogger('config.hbase')
 
@@ -42,14 +43,21 @@ class HBaseConfigSection(ReferConfigSection):
         """Release the reference
         """
         value.close()
+    
+    def __getinstancevalue__(self, value):
+        """Get the value returned by instance method
+        """
+        with value.value.connection(timeout = 10) as connection:
+            yield connection
 
     @classmethod
     def createConnectionByConfig(cls, config):
         """Create hbase connection by config
         """
-        host, port, timeout, tablePrefix, tablePrefixSeparator, compat, transport, protocol = \
+        host, port, timeout, tablePrefix, tablePrefixSeparator, compat, transport, protocol, poolSize = \
                 config['host'], config.get('port'), config.get('timeout', cls.DEFAULT_TIMEOUT), config.get('tablePrefix'), \
-                config.get('tablePrefixSeparator'), config.get('compat'), config.get('transport'), config.get('protocol')
+                config.get('tablePrefixSeparator'), config.get('compat'), config.get('transport'), config.get('protocol'), \
+                config.get('poolSize')
         # Create the params
         params = { 'host': host }
         if port:
@@ -66,7 +74,9 @@ class HBaseConfigSection(ReferConfigSection):
             params['transport'] = transport
         if protocol:
             params['protocol'] = protocol
+        if not poolSize:
+            poolSize = cls.DEFAULT_POOL_SIZE
         # Create the connection
         cls.logger.info('Connecting to hbase with host [%s] port [%s]', host, port or '*')
-        return happybase.Connection(**params)
+        return happybase.ConnectionPool(size = poolSize, **params)
 
