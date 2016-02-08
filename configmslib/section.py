@@ -17,6 +17,8 @@ from contextlib import contextmanager
 class ConfigSection(object):
     """The config section
     """
+    TYPE = None
+
     def __init__(self, config):
         """Create a new ConfigSection
         Parameters:
@@ -62,6 +64,10 @@ class ConfigSection(object):
             Nothing
         """
         self.config = config
+
+    def close(self):
+        """Close the config
+        """
 
 class ReferConfigSection(ConfigSection):
     """The config section which support reference counter

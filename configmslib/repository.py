@@ -11,13 +11,11 @@
 
 import logging
 
-from threading import Thread, Lock, Event
 from os.path import dirname, abspath, join
-from collections import namedtuple
+from threading import Lock, Thread
 
 import yaml
-
-from unifiedrpc import Service, endpoint
+import requests
 
 from sections import SECTIONS
 from section import ConfigSection
@@ -27,35 +25,49 @@ KNOWN_SECTION_TYPES = {
         }
 KNOWN_SECTION_TYPES.update(map(lambda x: (x.TYPE, x), SECTIONS))
 
-class ConfigRepository(Service):
+class ConfigRepository(object):
     """The config repository
-    NOTE:
-        This is also an unified rpc service
     """
     logger = logging.getLogger('configmslib.repository')
 
     def __init__(self, sectionTypes = None):
         """Create a new ConfigRepository
         """
-        self.sectionTypes = sectionTypes or KNOWN_SECTION_TYPES
         self.lock = Lock()
-        self.initEvent = None
-        self.initCount = 0
-        self.initThreads = []
-        self.watchingRepos = {} # Key is watching repo name, value is ConfigSection
-        self.sections = {}  # Key is section name, value is LoadedConfigSection
+        self.sectionTypes = sectionTypes or KNOWN_SECTION_TYPES
+        self.sections = {} # The loaded config section snapshot, key is config section name (A string), value is ConfigSectionSnapshot
+        self.watchingNames = [] # The watching names, a list of WatchingName object
+        self.hooks = {} # The hooks, key is WatchingName object, value is a list of callback method
+        # The states
+        self._watching = False
+        self._thread = None
+        self._request = None
 
     def __getitem__(self, section):
         """Get config section
         """
-        loadedConfigSection = self.sections.get(section)
-        if loadedConfigSection:
-            return loadedConfigSection.value
+        sectionSnapshot = self.sections.get(section)
+        if sectionSnapshot:
+            return sectionSnapshot.value
 
     def __getattr__(self, section):
         """Get config section
         """
         return self[section]
+
+    def __iter__(self):
+        """Iterate this repository, return the config section snapshots
+        """
+        # NOTE: Here we're using the values not the itervalues in order to
+        #       avoid exceptions when changing the sections in the iterating
+        for sectionSnapshot in self.sections.values():
+            yield sectionSnapshot
+
+    @property
+    def watching(self):
+        """Return whether watching or not
+        """
+        return self._watching
 
     @property
     def default(self):
@@ -63,29 +75,81 @@ class ConfigRepository(Service):
         """
         return self[None]
 
-    def bootup(self, adapter):
-        """Bootup this service
+    def watchAsync(self):
+        """Start watch the config
         """
-        if adapter.type != 'rabbitmq':
-            return
-        # Create a channel
-        # TODO:
-        raise NotImplementedError
+        # TODO: Start watch
 
-    @endpoint()
-    def onWatchingRepositoryChanged(self, routingKey, data, message, publish, ack):
-        """On watching repository changed
+    def hook(self, name, callback):
+        """Add a hook
         """
-        raise NotImplementedError
 
-    def loadSectionByConfig(self, config):
-        """Load the section by config
+    def gets(self, name):
+        """Get the configs by WatchingName
+        Parameters:
+            name                        The name string or WatchingName
+        Returns:
+            Yield of config section
         """
-        type, config = config.get('type'), config['config']
-        if not type in self.sectionTypes:
-            raise ValueError('Unknown config section type [%s]' % type)
-        # Create the config section
-        return self.sectionTypes[type](config)
+        if isinstance(name, basestring):
+            yield self[name]
+        elif isinstance(name, NormalName):
+            yield self[name.name]
+        else:
+            # Match one by one
+            for key in self.sections.keys():
+                if name.match(key):
+                    snapshot = self.sections.get(key)
+                    if snapshot:
+                        yield snapshot.value
+
+    def updateSection(self, name, value, timestamp):
+        """Update the section
+        Parameters:
+            name                        The section name
+            value                       The config value
+            timestamp                   The new config value timestamp
+        Returns:
+            True if updated, otherwise false
+        """
+        with self.lock:
+            _type, config = value.get('type'), value.get('config')
+            # Check if we have created the section
+            if name in self.sections and timestamp >= self.sections[name].timestamp:
+                # OK, already created and we need to update the config, let's check if the type match
+                if _type == self.sections[name].value.TYPE:
+                    # Good, let's update the config
+                    self.sections[name].value.update(config)
+                    return True
+                else:
+                    # The type not match, we have to close the old one and create a new one
+                    oldSection = self.sections.pop(name)
+                    try:
+                        oldSection.close()
+                    except:
+                        self.logger.exception('Failed to close config section [%s], skip', name)
+                    # Create the new one
+                    self.sections[name] = ConfigSectionSnapshot(name, self.createConfigSection(_type, config), timestamp)
+                    # Done
+                    return True
+            else:
+                # Create a new one
+                self.sections[name] = ConfigSectionSnapshot(name, self.createConfigSection(_type, config), timestamp)
+                return True
+        # Done
+        return False
+
+    def createConfigSection(self, _type, config):
+        """Create a new ConfigSection
+        """
+        if not _type in self.sectionTypes:
+            raise ValueError('Section type [%s] not found' % _type)
+        return self.sectionTypes[_type](config)
+
+    def updateWatching(self, names):
+        """Update the watching names
+        """
+        # TODO: Update watching
 
     def loadSchema(self, filename):
         """Load a schema from filename
@@ -102,161 +166,162 @@ class ConfigRepository(Service):
         with open(filename, 'rb') as fd:
             schema = yaml.load(fd)
         # Read schema
+        watchingNames = []
+        # Read static sections from schema
         sections = schema.get('sections')
-        if not sections:
-            return
-        # Load each section
-        for section in sections:
-            # Get section parameters
-            sectionName, repoName, filename, value, watching = \
-                    section.get('name'), section.get('repoName'), section.get('filename'), section.get('value'), section.get('watching')
-            if sectionName in self.sections:
-                # Unload the section
-                self.unload(sectionName)
-            # Get the section type, by repo, by file or by value
-            if repoName and not filename and not value:
-                # By repo
-                self.load(repoName, sectionName, watching if not watching is None else True)
-            elif filename and not repoName and not value:
-                # By file
-                # NOTE: if the filename is not an absolute path, will use the relative path of the schema file
-                if not filename.startswith('/'):
-                    # Make relative to absolute path
-                    filename = join(schemaFileDir, filename)
-                self.loadFile(filename, sectionName)
-            elif not value is None and not repoName and not filename:
-                # By value
-                self.loadDict(value, sectionName)
-            else:
-                raise ValueError('Invalid section [%s] please provide one and only one of the parameters [repoName, filename, value]' % sectionName)
+        if sections:
+            for section in sections:
+                name, value, watching = section.get('name'), section.get('value'), section.get('watching', True)
+                # Check parameters
+                if not value:
+                    raise ValueError('Require value of the section')
+                # Update the section
+                self.updateSection(name, value, 0)
+                # Add watching name
+                if watching:
+                    name = NormalName(name)
+                    if not name in watchingNames:
+                        watchingNames.append(name)
+        # Read watching from schema
+        watching = schema.get('watching')
+        if watching:
+            for watchingName in watching:
+                if not watchingName in watchingNames:
+                    watchingNames.append(watchingName)
+        self.updateWatching(watchingNames)
+        # Done
 
-    def loadDict(self, configDict, section = None):
-        """Load a config dict
-        Parameters:
-            configDict                  The config dict
-            section                     The section to be loaded into, None means the default section
-        Returns:
-            The loaded ConfigSection object
+    def doWatchingLoop(self):
+        """Do the watching loop
         """
-        with self.lock:
-            if section in self.sections:
-                raise ValueError('Section [%s] already exists' % section)
-            # Create & add section
-            configSection = self.loadSectionByConfig(configDict)
-            self.sections[section] = LoadedConfigSection(configSection, None, None)
-            # Done
-            return configSection
+        pass
 
-    def loadFile(self, filename, section = None):
-        """Load a config section file
-        Parameters:
-            filename                    The config filename, should be in yaml format
-            section                     The section to be loaded into, None means the default section
-        Returns:
-            The loaded ConfigSection object
+    def updateCallback(self, sectionSnapshot):
+        """The config update callback
+        This callback does:
+            1. Update the config value
+            2. Call the callback in hooks
         """
-        with self.lock:
-            if section in self.sections:
-                raise ValueError('Section [%s] already exists' % section)
-            # Load file
-            with open(filename, 'rb') as fd:
-                config = yaml.load(fd)
-            # Create & add the section
-            configSection = self.loadSectionByConfig(config)
-            self.sections[section] = LoadedConfigSection(configSection, None, None)
-            # Done
-            return configSection
+        pass
 
-    def load(self, repoName, section = None, watching = True):
-        """Load from config management service
-        Parameters:
-            repoName                    The repo name in config management service
-            section                     The section to be loaded into, None means the default section
-            watching                    Keep watching the configuration modification
-        Returns:
-            The loaded ConfigSection object
-        """
-        with self.lock:
-            if watching and repoName in self.watchingRepos:
-                raise ValueError('Repository [%s] is already watching' % repoName)
-            if section in self.sections:
-                raise ValueError('Section [%s] already exists' % section)
-            # Add it
-            loadedConfigSection = LoadedConfigSection(None, repoName, watching)
-            self.sections[section] = loadedConfigSection
-            if watching:
-                self.watchingRepos[repoName] = loadedConfigSection
-            # Initialize the repo
-            thread = Thread(self.initRepo4ConfigSection, loadedConfigSection)
-            thread.start()
-            self.initThreads.append(thread)
-            # Add init count
-            self.initCount += 1
-            # Check event
-            if not self.initEvent:
-                self.initEvent = Event()
-
-    def unload(self, section = None):
-        """Unload the section
-        Parameters:
-            section                     The section name, None means the default section
-        Returns:
-            Nothing
-        """
-        loadedConfigSection = self.sections.get(section)
-        if loadedConfigSection:
-            # Delete the section from sections
-            del self.sections[section]
-            # Unwatch if necessary
-            if loadedConfigSection.repoName and loadedConfigSection.watching and loadedConfigSection.repoName in self.watchingRepos:
-                # Delete the watching entry from watch repos
-                del self.watchingRepos[loadedConfigSection.repoName]
-                # Unbind
-
-    def initRepo4ConfigSection(self, loadedConfigSection):
-        """Initialize repo for config section
-        """
-        try:
-            # TODO: Add rpc call to config api server
-            pass
-        except:
-            pass
-        finally:
-            # Decrease init count
-            with self.lock:
-                self.initCount -= 1
-                if self.initCount == 0:
-                    # Set event
-                    self.initEvent.set()
-                    self.initEvent = None
-
-    def wait4init(self, timeout = None):
-        """Wait for initialize completed
-        Parameters:
-            timeout                     The timeout in seconds
-        """
-        event = self.initEvent
-        if not event:
-            # No initialization is in progress
-            return
-        if not event.wait(timeout):
-            # Timeout
-            raise TimeoutError
-        # Good, join threads
-        # NOTE: Here, we have potential multi-thread problem
-        with self.lock:
-            for thread in self.initThreads:
-                thread.join()
-            self.initThreads = []
-
-class LoadedConfigSection(object):
-    """The loaded config section
+class WatchingName(object):
+    """The watching name
     """
-    def __init__(self, value, repoName, watching):
-        """Create a new LoadedConfigSection
+    def match(self, name):
+        """Tell the name match the current watching name
+        Parameters:
+            name                    The name string
+        Returns:
+            True / False
         """
-        self.value = value
-        self.repoName = repoName
-        self.watching = watching
+        raise NotImplementedError
 
+    def dump(self):
+        """Dump to json
+        """
+        raise NotImplementedError
+
+class NormalName(WatchingName):
+    """The normal name of loading section name
+    """
+    TYPE = 'normal'
+
+    def __init__(self, name):
+        """Create a new NormalName
+        """
+        self.name = name
+
+    def __hash__(self):
+        """Get the hash code
+        """
+        return hash(self.name)
+
+    def __eq__(self, other):
+        """Equals
+        """
+        return isinstance(other, NormalName) and self.name == other.name
+
+    def __ne__(self, other):
+        """Not equals
+        """
+        return not isinstance(other, NormalName) or self.name != other.name
+
+    def match(self, name):
+        """Tell the name match the current watching name
+        Parameters:
+            name                    The name string
+        Returns:
+            True / False
+        """
+        return self.name == name
+
+    def dump(self):
+        """Dump to json
+        """
+        return { 'type': self.TYPE, 'name': self.name }
+
+    @classmethod
+    def load(cls, js):
+        """Load from json dict
+        """
+        return cls(js['name'])
+
+class PrefixName(WatchingName):
+    """The prefix name of loading section name
+    NOTE:
+        The name segment is separated by dot
+    """
+    TYPE = 'prefix'
+
+    def __init__(self, prefix):
+        """Create a new prefix
+        """
+        self.prefix = prefix
+
+    def __hash__(self):
+        """Get the hash code
+        """
+        return hash(self.prefix)
+
+    def __eq__(self, other):
+        """Equals
+        """
+        return isinstance(other, PrefixName) and self.prefix == other.prefix
+
+    def __ne__(self, other):
+        """Not equals
+        """
+        return not isinstance(other, PrefixName) or self.prefix != other.prefix
+
+    def match(self, name):
+        """Tell the name match the current watching name
+        Parameters:
+            name                    The name string
+        Returns:
+            True / False
+        """
+        return name.startswith(self.prefix)
+
+    def dump(self):
+        """Dump to json
+        """
+        return { 'type': self.TYPE, 'prefix': self.prefix }
+
+    @classmethod
+    def load(cls, js):
+        """Load from json dict
+        """
+        return cls(js['prefix'])
+
+NAME_TYPES = dict(map(lambda x: (x.TYPE, x), [ NormalName, PrefixName ]))
+
+class ConfigSectionSnapshot(object):
+    """The config section snapshot
+    """
+    def __init__(self, name, value, timestamp = None):
+        """Create a new ConfigSectionSnapshot
+        """
+        self.name = name
+        self.value = value
+        self.timestamp = timestamp or 0
 
