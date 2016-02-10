@@ -42,8 +42,17 @@ class HBaseConfigSection(ReferConfigSection):
     def __release__(self, value):
         """Release the reference
         """
-        value.close()
-    
+        #close all the connections in the pool
+        succ, failed = 0, 0
+        while not value._queue.empty():
+            conn = value._queue.get(False)
+            try:
+                conn.close()
+                succ += 1
+            except:
+                failed += 1
+        self.logger.info('release pool: %d happybase connection close succ, %d failed' % (succ, failed))
+
     def __getinstancevalue__(self, value):
         """Get the value returned by instance method
         """
