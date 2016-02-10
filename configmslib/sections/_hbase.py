@@ -47,9 +47,11 @@ class HBaseConfigSection(ReferConfigSection):
         while not value._queue.empty():
             conn = value._queue.get(False)
             try:
-                conn.close()
+                if conn:
+                    conn.close()
                 succ += 1
-            except:
+            except Exception,e:
+                self.logger.exception(e)
                 failed += 1
         self.logger.info('release pool: %d happybase connection close succ, %d failed' % (succ, failed))
 
