@@ -67,7 +67,7 @@ class HBaseConfigSection(ReferConfigSection):
             logging.exception(e)
             self.logger.warn('hbase connection broken, close it')
             conn.close()
-            return None
+            raise ValueError('cannot get valid hbase connection')
 
 
     def __getinstancevalue__(self, value):
