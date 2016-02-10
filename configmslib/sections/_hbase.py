@@ -55,11 +55,27 @@ class HBaseConfigSection(ReferConfigSection):
                 failed += 1
         self.logger.info('release pool: %d happybase connection close succ, %d failed' % (succ, failed))
 
+    def verifyConnection(self, conn):
+        """
+            @Brief verifyConnection 验证连接
+            @Param conn:
+        """
+        try:
+            tables = conn.tables()
+            return conn
+        except Exception,e:
+            logging.exception(e)
+            self.logger.warn('hbase connection broken, close it')
+            conn.close()
+            return None
+
+
     def __getinstancevalue__(self, value):
         """Get the value returned by instance method
         """
         with value.value.connection(timeout = 10) as connection:
-            yield connection
+            conn = self.verifyConnection(connection)
+            yield conn
 
     @classmethod
     def createConnectionByConfig(cls, config):
