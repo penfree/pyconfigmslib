@@ -42,13 +42,40 @@ class HBaseConfigSection(ReferConfigSection):
     def __release__(self, value):
         """Release the reference
         """
-        value.close()
-    
+        #close all the connections in the pool
+        succ, failed = 0, 0
+        while not value._queue.empty():
+            conn = value._queue.get(False)
+            try:
+                if conn:
+                    conn.close()
+                succ += 1
+            except Exception,e:
+                self.logger.exception(e)
+                failed += 1
+        self.logger.info('release pool: %d happybase connection close succ, %d failed' % (succ, failed))
+
+    def verifyConnection(self, conn):
+        """
+            @Brief verifyConnection 验证连接
+            @Param conn:
+        """
+        try:
+            tables = conn.tables()
+            return conn
+        except Exception,e:
+            logging.exception(e)
+            self.logger.warn('hbase connection broken, close it')
+            conn.close()
+            raise ValueError('cannot get valid hbase connection')
+
+
     def __getinstancevalue__(self, value):
         """Get the value returned by instance method
         """
         with value.value.connection(timeout = 10) as connection:
-            yield connection
+            conn = self.verifyConnection(connection)
+            yield conn
 
     @classmethod
     def createConnectionByConfig(cls, config):
