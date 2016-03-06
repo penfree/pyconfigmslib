@@ -9,9 +9,13 @@
 
 """
 
-from __version__ import __version__
+from __version__ import __version__, setVersion
 
-from repository import KNOWN_SECTION_TYPES, ConfigRepository, NormalName, PrefixName
+try:
+    # NOTE: This try - except is used when building setup packages
+    from repository import KNOWN_SECTION_TYPES, ConfigRepository, NormalName, PrefixName
+except:
+    pass
 
 __all__ = [ 'KNOWN_SECTION_TYPES', 'ConfigRepository', 'NormalName', 'PrefixName' ]
 
