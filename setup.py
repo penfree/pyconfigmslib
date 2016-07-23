@@ -34,6 +34,10 @@ setup(
     author_email = 'lipixun@iyoudoctor.com',
     url = 'https://github.com/lipixun/pyconfigmslib',
     packages = find_packages(),
+    package_data = {
+        'configmslib': [
+            'VERSION'
+        ] },
     install_requires = requirements,
     description = 'The config management system lib',
     long_description = open('README.md').read(),

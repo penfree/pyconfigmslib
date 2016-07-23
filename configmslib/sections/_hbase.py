@@ -63,19 +63,17 @@ class HBaseConfigSection(ReferConfigSection):
         try:
             tables = conn.tables()
             return conn
-        except Exception,e:
-            logging.exception(e)
-            self.logger.warn('hbase connection broken, close it')
-            conn.close()
-            raise ValueError('cannot get valid hbase connection')
-
+        except Exception:
+            logging.exception('base connection broken, close it')
+            #conn.close()
+            raise
 
     def __getinstancevalue__(self, value):
         """Get the value returned by instance method
         """
         with value.value.connection(timeout = 10) as connection:
-            conn = self.verifyConnection(connection)
-            yield conn
+            #yield self.verifyConnection(connection)
+            yield connection
 
     @classmethod
     def createConnectionByConfig(cls, config):
