@@ -9,8 +9,6 @@
 
 """
 
-from __version__ import __version__
-
 from repository import KNOWN_SECTION_TYPES, ConfigRepository, NormalName, PrefixName
 
 __all__ = [ 'KNOWN_SECTION_TYPES', 'ConfigRepository', 'NormalName', 'PrefixName' ]

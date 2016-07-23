@@ -1,4 +1,3 @@
-unifiedrpc
 pyyaml
 pymongo
 hiredis
