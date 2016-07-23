@@ -72,7 +72,6 @@ class HBaseConfigSection(ReferConfigSection):
         """Get the value returned by instance method
         """
         with value.value.connection(timeout = 10) as connection:
-            #yield self.verifyConnection(connection)
             yield connection
 
     @classmethod
@@ -104,4 +103,3 @@ class HBaseConfigSection(ReferConfigSection):
         # Create the connection
         cls.logger.info('Connecting to hbase with host [%s] port [%s]', host, port or '*')
         return happybase.ConnectionPool(size = poolSize, **params)
-

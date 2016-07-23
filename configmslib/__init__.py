@@ -9,7 +9,6 @@
 
 """
 
-from repository import KNOWN_SECTION_TYPES, ConfigRepository, NormalName, PrefixName
+from repository import KNOWN_SECTION_TYPES, ConfigRepository
 
-__all__ = [ 'KNOWN_SECTION_TYPES', 'ConfigRepository', 'NormalName', 'PrefixName' ]
-
+__all__ = [ 'KNOWN_SECTION_TYPES', 'ConfigRepository' ]

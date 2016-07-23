@@ -48,8 +48,10 @@ class MongodbConfigSection(ReferConfigSection):
         """Create a mongodb clieng by config
         """
         uri, timeout, connectTimeout, keepAlive = \
-                config['uri'], config.get('timeout', cls.DEFAULT_TIMEOUT), config.get('connectTimeout', cls.DEFAULT_CONNECT_TIMEOUT), config.get('keepAlive', cls.DEFAULT_KEEP_ALIVE)
+                config['uri'], \
+                config.get('timeout', cls.DEFAULT_TIMEOUT), \
+                config.get('connectTimeout', cls.DEFAULT_CONNECT_TIMEOUT), \
+                config.get('keepAlive', cls.DEFAULT_KEEP_ALIVE)
         cls.logger.info('Connecting to mongodb with uri [%s]', uri)
         # Create the client
         return MongoClient(host = uri, socketTimeoutMS = timeout, connectTimeoutMS = connectTimeout, socketKeepAlive = keepAlive)
-
