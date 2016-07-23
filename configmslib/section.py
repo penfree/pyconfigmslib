@@ -112,8 +112,8 @@ class ReferConfigSection(ConfigSection):
         value.increase()
         try:
             # Yield
-            for instanceValue in self.__getinstancevalue__(value):
-                yield instanceValue
+            gen = self.__getinstancevalue__(value)
+            yield gen.next()
         except Exception as error:
             # Run within error
             self.__withinerror__(error)

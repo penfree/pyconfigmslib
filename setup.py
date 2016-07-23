@@ -1,8 +1,8 @@
 # encoding=utf8
 
-"""
+""" The configmslib setup script
     Author: lipixun
-    Created Time : 四 12/17 17:28:50 2015
+    Created Time : 三  1/20 20:11:05 2016
 
     File Name: setup.py
     Description:

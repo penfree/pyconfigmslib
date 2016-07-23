@@ -84,6 +84,11 @@ class ConfigRepository(object):
         """Add a hook
         """
 
+    def get(self, name):
+        """Get a config value
+        """
+        return self[name]
+
     def gets(self, name):
         """Get the configs by WatchingName
         Parameters:
