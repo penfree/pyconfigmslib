@@ -7,140 +7,261 @@
     File Name: section.py
     Description:
 
+        Update section from etcd:
+
+            The config is stored at path: <environ.repository>/<environ.name>/<key>
+
 """
 
+import time
 import logging
 
-from threading import RLock
+from util import json
+from config import EnvironConfig
+from threading import Thread, RLock, Event
 from contextlib import contextmanager
 
-class ConfigSection(object):
+class ConfigSection(dict):
     """The config section
     """
-    TYPE = None
+    logger = logging.getLogger("configmslib.section")
 
-    def __init__(self, config):
+    Type = None
+    ReloadRequired = False
+
+    def __init__(self, key, value, repository, autoUpdate = False, environ = None, wait = False):
         """Create a new ConfigSection
         Parameters:
-            config                              The config dict
+            key                             The config key
+            value                           The config value
+            autoUpdate                      Auto update this config or not
+            environ                         The environ config dict
         """
-        self.config = config
+        self._key = key
+        self._repository = repository
+        self._autoUpdate = autoUpdate
+        self._environ = EnvironConfig(**environ) if environ else None
+        self._updatedEvent = Event()
+        self._timestamp = 0.0
+        self._reloadLock = None
+        self._reloadEvent = None
+        self._reloadedEvent = None
+        self._reloadThread = None
+        self._autoUpdateThread = None
+        # Super
+        super(ConfigSection, self).__init__()
+        # Check if reload is required
+        if self.ReloadRequired:
+            self._reloadLock = RLock()
+            self._reloadEvent = Event()
+            self._reloadedEvent = Event()
+            # Start reload thread
+            thread = Thread(target = self.__reload__)
+            thread.setDaemon(True)
+            thread.start()
+            self._reloadThread = thread
+        # Update the value
+        self.update(value)
+        # Check auto update
+        if autoUpdate:
+            thread = Thread(target = self.__autoupdate__)
+            thread.setDaemon(True)
+            thread.start()
+            self._autoUpdateThread = thread
+        # Wait
+        if wait:
+            if self.ReloadRequired:
+                # Wait for reloaded
+                self._reloadedEvent.wait()
+            else:
+                # Wait for updated
+                self._updatedEvent.wait()
 
-    def __len__(self):
-        """Get the length
+    @property
+    def key(self):
+        """Get the section key
         """
-        return len(self.config)
+        return self._key
 
-    def __contains__(self, key):
-        """Check if a key exists
+    @property
+    def repository(self):
+        """Get the config repository this section belongs to
         """
-        return key in self.config
+        return self._repository
 
-    def __getitem__(self, key):
-        """Get a config value
+    def __autoupdate__(self):
+        """Auto update
         """
-        return self.config[key]
+        # TODO: Support modified index
+        initialized = False
+        self.logger.debug("[%s] Auto update thread started", self.Type)
+        while True:
+            # Get etcd client
+            client = None
+            while True:
+                if self._repository.etcd is None:
+                    self.logger.error("[%s] Failed to watch config, no etcd client found, will retry in 30s", self.Type)
+                    time.sleep(30)
+                    continue
+                client = self._repository.etcd
+                break
+            # Wait for the config
+            # Get the read path
+            if self._environ:
+                path = self._environ.getEtcdPath(self._key)
+            else:
+                path = self._repository.environ.getEtcdPath(self._key)
+            # Wait the config
+            try:
+                if not initialized:
+                    # Not initialized
+                    self.logger.debug("[%s] Watching config at path [%s]", self.Type, path)
+                    if self.update(json.loads(client.read(path).value)):
+                        initialized = True
+                else:
+                    # Initialized, just wait
+                    self.logger.debug("[%s] Watching config at path [%s]", self.Type, path)
+                    self.update(json.loads(client.read(path, wait = True).value))
+            except:
+                # Error, wait 30s and continue watch
+                self.logger.exception("[%s] Failed to watch etcd, will retry in 30s", self.Type)
+                time.sleep(30)
 
-    def __setitem__(self, key, value):
-        """Set a config value
-        """
-        self.config[key] = value
-
-    def __delitem__(self, key):
-        """Delete a config value
-        """
-        del self.config[key]
-
-    def get(self, key, default = None):
-        """Get a config
-        """
-        return self.config.get(key, default)
-
-    def update(self, config):
+    def update(self, value):
         """Update the config
         Parameters:
-            config                              The config dict
+            value                           The config value
         Returns:
             Nothing
         """
-        self.config = config
+        if not isinstance(value, dict):
+            self.logger.error("[%s] Failed to update config, value must be a dict", self.Type)
+            return False
+        # Validate
+        try:
+            self.validate(value)
+        except:
+            self.logger.exception("[%s] Failed to validate config value: [%s]", self.Type, json.dumps(value, ensure_ascii = False))
+            return False
+        # Remove all values from self and update new values
+        def updateConfig():
+            """Update the config
+            """
+            self.clear()
+            super(ConfigSection, self).update(value)
+            self._timestamp = time.time()
+        # Update
+        if self._reloadLock:
+            with self._reloadLock:
+                updateConfig()
+        else:
+            updateConfig()
+        # If reload is required
+        if self.ReloadRequired:
+            self._reloadEvent.set()
+        # Updated
+        self._updatedEvent.set()
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logger.debug("[%s] Config updated [%s]", self.Type, json.dumps(value, ensure_ascii = False))
+        # Done
+        return True
+
+    def validate(self, value):
+        """Validate the config value
+        """
+        pass
+
+    def __reload__(self):
+        """Reload this config
+        """
+        self.logger.debug("[%s] Reload thread started", self.Type)
+        reloadedTimestamp = 0.0
+        while True:
+            if reloadedTimestamp >= self._timestamp:
+                # Wait for reload event
+                self._reloadEvent.wait()
+                self._reloadEvent.clear()
+            # Start reload until reload succeed
+            while True:
+                try:
+                    # Lock the reload lock, copy timestamp and config
+                    with self._reloadLock:
+                        reloadedTimestamp = self._timestamp
+                        config = dict(self)
+                    # Run reload
+                    self.reload(config)
+                except:
+                    self.logger.exception("[%s] Failed to reload config, will retry in 30s", self.Type)
+                    time.sleep(30)
+                else:
+                    self._reloadedEvent.set()
+                    break
+
+    def reload(self, config):
+        """Reload this config
+        """
+        pass
 
     def close(self):
         """Close the config
         """
+        pass
 
 class ReferConfigSection(ConfigSection):
     """The config section which support reference counter
     """
-    logger = logging.getLogger('config.refer')
-
-    def __init__(self, config):
-        """Create a new ReferConfigSection
-        """
-        self._lock = RLock()
-        # Get reference value
-        self._value = ReferencedValue(self.__reference__(config))
-        # Super
-        super(ReferConfigSection, self).__init__(config)
-
-    def __reference__(self, config):
+    def reference(self, config):
         """Get the current referenced value
         """
         raise NotImplementedError
 
-    def __release__(self, value):
+    def release(self, value):
         """The reference count has decreased to zero, could be released
         """
         pass
 
-    def __withinerror__(self, error):
+    def withinError(self, error):
         """When error occurred in the with statements
         """
         pass
 
-    def __getinstancevalue__(self, value):
+    def getInstanceValue(self, value):
         """Get the value returned by instance method
         """
-        yield value.value
+        yield value
+
+    def reload(self, config):
+        """Reload this section
+        """
+        self._value = ReferencedValue(self.reference(config))
 
     @contextmanager
     def instance(self):
         """Get the instance
         """
-        value = self._value
-        # Increase
-        value.increase()
         try:
-            # Yield
-            gen = self.__getinstancevalue__(value)
-            yield gen.next()
+            value = self._value
+            # Increase
+            value.increase()
+            # Yield return the referenced value
+            yield self.getInstanceValue(value.value).next()
         except Exception as error:
             # Run within error
-            self.__withinerror__(error)
+            self.withinError(error)
             # Re-raise
             raise
         finally:
             # Decrease
             value.decrease()
-            # Check
+            # Check if the referenced value is changed
             if self._value != value and value.notReferenced:
-                # Updated and should be release
+                # Updated and should be released
+                self.logger.info("[%s] Referenced value changed and release is required", self.Type)
+                # Release
                 try:
-                    self.__release__(value.value)
+                    self.release(value.value)
                 except:
-                    self.logger.exception('Failed to release the referenced value')
-
-    def update(self, config):
-        """Update the config
-        Parameters:
-            config                              The config dict
-        Returns:
-            Nothing
-        """
-        # Create value
-        self._value = ReferencedValue(self.__reference__(config))
-        # Super
-        return super(ReferConfigSection, self).update(config)
+                    self.logger.exception('[%s] Failed to release the old referenced value', self.Type)
 
 class ReferencedValue(object):
     """The referenced value

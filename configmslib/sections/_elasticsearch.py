@@ -9,17 +9,11 @@
 
 """
 
-import logging
-
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import TransportError
 
 from configmslib.section import ReferConfigSection
 from configmslib.util import json
-
-esLogger = logging.getLogger('elasticsearch.trace')
-
-DEFAULT_TIMEOUT = 30 * 1000     # 30s
 
 class ElasticsearchConfigSection(ReferConfigSection):
     """The elasticsearch config section
@@ -29,21 +23,30 @@ class ElasticsearchConfigSection(ReferConfigSection):
     TODO:
         Add support to transport class and kwargs
     """
-    TYPE = 'elasticsearch'
+    Type = "elasticsearch"
+    ReloadRequired = True
+    DefaultTimeout = 30.0   # 30s
 
-    logger = logging.getLogger('config.elasticsearch')
+    def validate(self, value):
+        """Validate the config value
+        """
+        hosts = value.get("hosts")
+        if not isinstance(hosts, (basestring, list, tuple)):
+            raise ValueError("Invalid hosts")
 
-    def __reference__(self, config):
+    def reference(self, config):
         """Get the referenced value
         """
-        return self.createClientbyConfig(config)
+        hosts = config.get("hosts")
+        if isinstance(hosts, basestring):
+            hosts = (hosts, )
+        timeout = config.get("timeout", self.DefaultTimeout)
+        # Log it
+        self.logger.info("[%s] Connecting to elasticsearch [%s] timeout [%s]", self.Type, ",".join(hosts), timeout)
+        # Create the client
+        return Elasticsearch(hosts, timeout = float(timeout))
 
-    def __release__(self, value):
-        """Release the value
-        """
-        pass
-
-    def __withinerror__(self, error):
+    def withinError(self, error):
         """When error occurred in the with statements
         """
         if isinstance(error, TransportError):
@@ -53,15 +56,3 @@ class ElasticsearchConfigSection(ReferConfigSection):
                 error.error,
                 json.dumps(error.info, ensure_ascii = False) if error.info else ''
                 ))
-
-    @classmethod
-    def createClientbyConfig(cls, config):
-        """Create elasticsearch client by config
-        """
-        hosts = config['hosts']
-        if isinstance(hosts, basestring):
-            hosts = (hosts, )
-        timeout = config.get('timeout', DEFAULT_TIMEOUT)
-        cls.logger.info('Connecting to elasticsearch with hosts: %s timeout [%s]', hosts, timeout)
-        # Create the client
-        return Elasticsearch(hosts, timeout = float(timeout) / 1000.0)

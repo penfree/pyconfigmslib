@@ -11,13 +11,11 @@
 
 """
 
-import logging
-
 from threading import Lock
 
 from redis import StrictRedis
 
-from ..section import ReferConfigSection
+from configmslib.section import ReferConfigSection
 
 class RedisConfigSection(ReferConfigSection):
     """The redis config section
@@ -27,16 +25,22 @@ class RedisConfigSection(ReferConfigSection):
         - password              The redis password
         - timeout               The socket timeout in ms
     """
-    TYPE = 'redis'
+    Type = 'redis'
+    ReloadRequired = True
 
-    logger = logging.getLogger('config.redis')
+    def validate(self, value):
+        """Validate the config value
+        """
+        host = value.get("host")
+        if not host:
+            raise ValueError("Require host")
 
-    def __reference__(self, config):
+    def reference(self, config):
         """Get the referenced value from config
         """
         return RedisDatabase(config)
 
-    def __release__(self, value):
+    def release(self, value):
         """Release the referenced mongodb client
         """
         value.close()
@@ -44,10 +48,8 @@ class RedisConfigSection(ReferConfigSection):
 class RedisDatabase(object):
     """The redis database
     """
-    DEFAULT_PORT            = 6379      # Default redis port
-    DEFAULT_TIMEOUT         = 10 * 1000 # 10s
-
-    logger = logging.getLogger('config.redis.database')
+    DefaultPort            = 6379       # Default redis port
+    DefaultTimeout         = 10         # 10s
 
     def __init__(self, config):
         """Create a new RedisDatabase
@@ -59,13 +61,16 @@ class RedisDatabase(object):
     def __getitem__(self, db):
         """Get a database
         """
-        with self._lock:
-            redis = self._dbs.get(db)
-            if not redis:
-                # Create new redis client
-                redis = self.createRedisByConfig(self.config, db)
-                self._dbs[db] = redis
-            return redis
+        redis = self._dbs.get(db)
+        if not redis:
+            with self._lock:
+                redis = self._dbs.get(db)
+                if not redis:
+                    # Create new redis client
+                    redis = self.createRedisByConfig(self.config, db)
+                    self._dbs[db] = redis
+        # Done
+        return redis
 
     def close(self):
         """Close this database
@@ -74,17 +79,17 @@ class RedisDatabase(object):
             try:
                 redis.disconnect()
             except:
-                self.logger.exception('Failed to disconnect redis for database [%s], ignore', db)
+                RedisConfigSection.logger.exception('[%s] Failed to disconnect redis for database [%s], ignore', RedisConfigSection.Type, db)
 
     @classmethod
     def createRedisByConfig(cls, config, db):
         """Create redis by config
         """
         host, port, password, timeout = \
-                config['host'], config.get('port', cls.DEFAULT_PORT), config.get('password'), config.get('timeout', cls.DEFAULT_TIMEOUT)
-        if not timeout is None:
-            timeout = timeout / 1000.0
-        cls.logger.info('Connecting to redis with host [%s] port [%s]', host, port)
+                config['host'], \
+                config.get('port', cls.DefaultPort), \
+                config.get('password'), \
+                config.get('timeout', cls.DefaultTimeout)
+        RedisConfigSection.logger.info('[%s] Connecting to redis with host [%s] port [%s]', RedisConfigSection.Type, host, port)
         # Create the redis client
         return StrictRedis(host, port, db, password, timeout)
-

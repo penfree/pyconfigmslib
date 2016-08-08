@@ -4,3 +4,4 @@ hiredis
 redis
 elasticsearch
 happybase
+python-etcd

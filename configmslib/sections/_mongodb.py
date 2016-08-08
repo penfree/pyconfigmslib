@@ -11,11 +11,9 @@
 
 """
 
-import logging
-
 from pymongo import MongoClient
 
-from ..section import ReferConfigSection
+from configmslib.section import ReferConfigSection
 
 class MongodbConfigSection(ReferConfigSection):
     """The mongodb config section
@@ -25,33 +23,39 @@ class MongodbConfigSection(ReferConfigSection):
         - connectTimeout    The socket connect timeout in ms
         - keepAlive         Enable keep alive or not
     """
-    TYPE = 'mongodb'
+    Type = 'mongodb'
+    ReloadRequired = True
+    DefaultTimeout = 10                 # 10s
+    DefaultConnectionTimeout = 10       # 10s
+    DefaultKeepAlive = False            # Do not keep alive by default
 
-    DEFAULT_TIMEOUT         = 10 * 1000     # 10s
-    DEFAULT_CONNECT_TIMEOUT = 10 * 1000     # 10s
-    DEFAULT_KEEP_ALIVE      = False         # Do not keep alive by default
+    def validate(self, value):
+        """Validate the config value
+        """
+        uri = value.get("uri")
+        if not uri:
+            raise ValueError("Require uri")
 
-    logger = logging.getLogger('config.mongodb')
-
-    def __reference__(self, config):
+    def reference(self, config):
         """Get the referenced mongodb client
         """
-        return self.createClientByConfig(config)
+        uri, timeout, connectTimeout, keepAlive, replicaSetName = \
+                config['uri'], \
+                config.get('timeout', self.DefaultTimeout), \
+                config.get('connectTimeout', self.DefaultConnectionTimeout), \
+                config.get('keepAlive', self.DefaultKeepAlive), \
+                config.get('replicaSet'),
+        self.logger.info('[%s] Connecting to mongodb with uri [%s]', self.Type, uri)
+        # Create the client
+        return MongoClient(
+            host = uri,
+            socketTimeoutMS = timeout * 1000.0,
+            connectTimeoutMS = connectTimeout * 1000.0,
+            socketKeepAlive = keepAlive,
+            replicaset = replicaSetName,
+        )
 
-    def __release__(self, value):
+    def release(self, value):
         """Release the referenced mongodb client
         """
         value.close()
-
-    @classmethod
-    def createClientByConfig(cls, config):
-        """Create a mongodb clieng by config
-        """
-        uri, timeout, connectTimeout, keepAlive = \
-                config['uri'], \
-                config.get('timeout', cls.DEFAULT_TIMEOUT), \
-                config.get('connectTimeout', cls.DEFAULT_CONNECT_TIMEOUT), \
-                config.get('keepAlive', cls.DEFAULT_KEEP_ALIVE)
-        cls.logger.info('Connecting to mongodb with uri [%s]', uri)
-        # Create the client
-        return MongoClient(host = uri, socketTimeoutMS = timeout, connectTimeoutMS = connectTimeout, socketKeepAlive = keepAlive)

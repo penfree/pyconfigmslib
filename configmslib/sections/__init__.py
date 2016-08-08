@@ -22,4 +22,3 @@ SECTIONS = [
         ]
 
 __all__ = [ 'SECTIONS' ]
-
