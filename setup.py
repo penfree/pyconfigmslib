@@ -11,20 +11,20 @@
 
 import sys
 reload(sys)
-sys.setdefaultencoding('utf8')
+sys.setdefaultencoding("utf8")
 
 from setuptools import setup, find_packages
 
-requirements = [ x.strip() for x in open('requirements.txt').readlines() ]
+requirements = [ x.strip() for x in open("requirements.txt").readlines() ]
 
 setup(
-    name = 'configmslib',
-    author = 'lipixun',
-    author_email = 'lipixun@outlook.com',
-    url = 'https://github.com/lipixun/pyconfigmslib',
+    name = "configmslib",
+    version = "1.0",
+    author = "lipixun",
+    author_email = "lipixun@outlook.com",
+    url = "https://github.com/lipixun/pyconfigmslib",
     packages = find_packages(),
     install_requires = requirements,
-    description = 'The config lib',
-    long_description = open('README.md').read(),
+    description = "The config lib",
+    long_description = open("README.md").read(),
 )
-
