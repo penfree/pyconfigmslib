@@ -11,4 +11,6 @@
 
 from repository import KNOWN_SECTION_TYPES, ConfigRepository
 
+__version__ = "1.0"
+
 __all__ = [ 'KNOWN_SECTION_TYPES', 'ConfigRepository' ]

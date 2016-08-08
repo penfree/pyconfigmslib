@@ -17,9 +17,11 @@ from setuptools import setup, find_packages
 
 requirements = [ x.strip() for x in open("requirements.txt").readlines() ]
 
+import configmslib
+
 setup(
     name = "configmslib",
-    version = "1.0",
+    version = configmslib.__version__,
     author = "lipixun",
     author_email = "lipixun@outlook.com",
     url = "https://github.com/lipixun/pyconfigmslib",
