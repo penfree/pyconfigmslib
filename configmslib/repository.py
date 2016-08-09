@@ -166,7 +166,7 @@ class ConfigRepository(object):
             section.get("wait", True)
         # Check
         if not name:
-            raise ValueError("Require name")
+            name = None
         if not t in self.sectionTypes:
             raise ValueError("Unknown section type [%s]" % t)
         if environ:

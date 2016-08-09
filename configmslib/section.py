@@ -21,6 +21,8 @@ from config import EnvironConfig
 from threading import Thread, RLock, Event
 from contextlib import contextmanager
 
+NoDefault = object()
+
 class ConfigSection(dict):
     """The config section
     """
@@ -62,18 +64,18 @@ class ConfigSection(dict):
             self._reloadThread = thread
         # Update the value
         self.update(value)
-        # Check auto update
-        if autoUpdate:
+        # Check auto update (Key will empty value is not be auto updated)
+        if key and autoUpdate:
             thread = Thread(target = self.__autoupdate__)
             thread.setDaemon(True)
             thread.start()
             self._autoUpdateThread = thread
         # Wait
         if wait:
-            if self.ReloadRequired:
+            if self.ReloadRequired and self._reloadedEvent:
                 # Wait for reloaded
                 self._reloadedEvent.wait()
-            else:
+            elif self._updatedEvent:
                 # Wait for updated
                 self._updatedEvent.wait()
 
@@ -88,6 +90,46 @@ class ConfigSection(dict):
         """Get the config repository this section belongs to
         """
         return self._repository
+
+    def first(self, key, default = NoDefault):
+        """Get first value of key
+        """
+        for value in self.find(key):
+            return value
+        # Not found
+        if default == NoDefault:
+            raise KeyError(key)
+        return default
+
+    def find(self, key):
+        """Find the values of key
+        Returns:
+            Yield of value
+        """
+        def iterfind(obj, names):
+            """Iterate find names in obj
+            """
+            if len(names) > 0:
+                name = names[0]
+                # Check the obj
+                if isinstance(obj, dict):
+                    # Find key in this dict
+                    if name in obj:
+                        # Good
+                        for v in iterfind(obj[name], names[1: ]):
+                            yield v
+                elif isinstance(obj, (list, tuple)):
+                    # A list or tuple, iterate item
+                    for item in obj:
+                        for v in iterfind(item, names):
+                            yield v
+                else:
+                    # Not a dict, list or tuple, stop here
+                    pass
+            else:
+                yield obj
+        for value in iterfind(self, key.split(".")):
+            yield value
 
     def __autoupdate__(self):
         """Auto update

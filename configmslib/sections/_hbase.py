@@ -28,7 +28,7 @@ class HBaseConfigSection(ReferConfigSection):
     Type = "hbase"
     ReloadRequired = True
     DefaultTimeout = 10.0       # 10s
-    DefaultPoolSize = 3
+    DefaultPoolSize = 30
 
     def validate(self, value):
         """Validate the config value
@@ -37,12 +37,12 @@ class HBaseConfigSection(ReferConfigSection):
         if not host:
             raise ValueError("Require host")
 
-    def __reference__(self, config):
+    def reference(self, config):
         """Get the referenced connection
         """
         host, port, timeout, tablePrefix, tablePrefixSeparator, compat, transport, protocol, poolSize = \
                 config["host"], \
-                config.get("port", 9200), \
+                config.get("port", 9090), \
                 config.get("timeout", self.DefaultTimeout), \
                 config.get("tablePrefix"), \
                 config.get("tablePrefixSeparator"), \
@@ -66,13 +66,11 @@ class HBaseConfigSection(ReferConfigSection):
             params["transport"] = transport
         if protocol:
             params["protocol"] = protocol
-        if not poolSize:
-            params["size"] = poolSize
         self.logger.info("[%s] Connecting to hbase with host [%s] port [%s]", self.Type, host, port)
         # Create the connection pool
-        return happybase.ConnectionPool(**params)
+        return happybase.ConnectionPool(size = poolSize, **params)
 
-    def reloase(self, value):
+    def release(self, value):
         """Release the reference
         """
         # Close all the connections in the pool
@@ -89,8 +87,8 @@ class HBaseConfigSection(ReferConfigSection):
         # Done
         self.logger.info('[%s] Release pool: [%d] hbase connection closed successfully and [%d] failed' % (self.Type, succ, failed))
 
-    def __getinstancevalue__(self, value):
+    def getInstanceValue(self, value):
         """Get the value returned by instance method
         """
-        with value.value.connection(timeout = self.get("timeout", self.DefaultTimeout)) as connection:
+        with value.connection(timeout = self.get("timeout", self.DefaultTimeout)) as connection:
             yield connection
