@@ -281,6 +281,7 @@ class ReferConfigSection(ConfigSection):
     def instance(self):
         """Get the instance
         """
+        value = None
         try:
             value = self._value
             # Increase
@@ -293,8 +294,9 @@ class ReferConfigSection(ConfigSection):
             # Re-raise
             raise
         finally:
-            # Decrease
-            value.decrease()
+            if not value is None:
+                # Decrease
+                value.decrease()
             # Check if the referenced value is changed
             if self._value != value and value.notReferenced:
                 # Updated and should be released
