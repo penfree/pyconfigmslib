@@ -121,7 +121,7 @@ class ConfigRepository(object):
                         includeFilename = join(dirname(filename), includeFilename)
                     # Load it if not loaded
                     if not includeFilename in loadedFiles:
-                        self._loadSchemaFile(includeFilename, environPath, loadedFiles)
+                        self._loadSchemaFile(includeFilename, environPath, noSections, loadedFiles)
             # Read global configs
             globalConfigs = schema.get("globals")
             if globalConfigs:
