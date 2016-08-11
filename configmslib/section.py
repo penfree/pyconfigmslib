@@ -16,6 +16,8 @@
 import time
 import logging
 
+from etcd import EtcdKeyNotFound, EtcdWatchTimedOut, EtcdEventIndexCleared
+
 from util import json
 from config import EnvironConfig
 from threading import Thread, RLock, Event
@@ -164,6 +166,9 @@ class ConfigSection(dict):
                     # Initialized, just wait
                     self.logger.debug("[%s] Watching config at path [%s]", self.Type, path)
                     self.update(json.loads(client.read(path, wait = True).value))
+            except (EtcdKeyNotFound, EtcdWatchTimedOut, EtcdEventIndexCleared):
+                # A normal error
+                time.sleep(10)
             except:
                 # Error, wait 30s and continue watch
                 self.logger.exception("[%s] Failed to watch etcd, will retry in 30s", self.Type)
