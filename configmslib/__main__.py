@@ -125,28 +125,32 @@ def main():
     if args.environ:
         environ["name"] = args.environ
     logging.info("Set environ [%s] --> [%s]", environ.repository, environ.name)
-    if args.action == "set":
-        # Set the config
-        for kv in args.kvs:
-            idx = kv.find("=")
-            if idx == -1:
-                logging.error("Bad kv value: [%s]", kv)
-                return 1
-            key, value = kv[: idx], kv[idx + 1: ]
-            if value.startswith("@"):
-                # From file
-                logging.info("Load value of key [%s] from file [%s]", key, value)
-                value = loadValueFile(value[1: ])
-            print "Set key", termcolor.colored(key, "yellow")
-            etcdClient.write(environ.getEtcdPath(key), value)
-    elif args.action == "get":
-        # Get the config
-        for key in args.keys:
-            result = etcdClient.read(environ.getEtcdPath(key))
-            print termcolor.colored(key, "yellow"), result.value
-    else:
-        logging.error("Unknown action [%s]", args.action)
-        return 1
+    try:
+        if args.action == "set":
+            # Set the config
+            for kv in args.kvs:
+                idx = kv.find("=")
+                if idx == -1:
+                    logging.error("Bad kv value: [%s]", kv)
+                    return 1
+                key, value = kv[: idx], kv[idx + 1: ]
+                if value.startswith("@"):
+                    # From file
+                    logging.info("Load value of key [%s] from file [%s]", key, value)
+                    value = loadValueFile(value[1: ])
+                print "Set key", termcolor.colored(key, "yellow")
+                etcdClient.write(environ.getEtcdPath(key), value)
+        elif args.action == "get":
+            # Get the config
+            for key in args.keys:
+                result = etcdClient.read(environ.getEtcdPath(key))
+                print termcolor.colored(key, "yellow"), result.value
+        else:
+            logging.error("Unknown action [%s]", args.action)
+            return 1
+    except etcd.EtcdKeyNotFound:
+        # Config not found
+        print termcolor.colored("Config not found", "red")
     # Done
     return 0
 

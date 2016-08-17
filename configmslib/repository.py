@@ -79,6 +79,15 @@ class ConfigRepository(object):
         else:
             return EnvironConfig()
 
+    def updateSectionTypes(self, types):
+        """Update section types
+        Parameters:
+            types                   A dict
+        Returns:
+            Nothing
+        """
+        self.sectionTypes.update(types)
+
     def get(self, name):
         """Get a config value
         """
@@ -155,7 +164,11 @@ class ConfigRepository(object):
         """Update the section
         Parameters:
             name                        The section name
-            value                       The config value
+            t                           The section type
+            value                       The section type
+            autoUpdate                  Whether auto update this section or not
+            environ                     The environment of this section
+            wait                        Whether to wait this section ready or not
         """
         name, t, value, autoUpdate, environ, wait = \
             section.get("name"), \
