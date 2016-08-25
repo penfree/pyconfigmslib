@@ -45,7 +45,7 @@ class MongodbConfigSection(ReferConfigSection):
                 config.get('connectTimeout', self.DefaultConnectionTimeout), \
                 config.get('keepAlive', self.DefaultKeepAlive), \
                 config.get('replicaSet'),
-        self.logger.info('[%s] Connecting to mongodb with uri [%s]', self.Type, uri)
+        self.logger.info('[%s] Connecting to mongodb with uri [%s] replicaSet [%s]', self.Type, uri, replicaSetName)
         # Create the client
         return MongoClient(
             host = uri,

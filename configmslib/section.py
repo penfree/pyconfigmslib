@@ -65,6 +65,11 @@ class ConfigSection(dict):
             thread.start()
             self._reloadThread = thread
         # Update the value
+        try:
+            value = self.getInitialUpdatedValue()
+        except:
+            if self.logger.isEnabledFor(logging.DEBUG):
+                self.logger.exception("Failed to get initial updated value, fall back to pre-defined value")
         self.update(value)
         # Check auto update (Key will empty value is not be auto updated)
         if key and autoUpdate:
@@ -173,6 +178,18 @@ class ConfigSection(dict):
                 # Error, wait 30s and continue watch
                 self.logger.exception("[%s] Failed to watch etcd, will retry in 30s", self.Type)
                 time.sleep(30)
+
+    def getInitialUpdatedValue(self):
+        """Get updated value
+        """
+        if self._repository.etcd is None:
+            raise ValueError("No etcd available")
+        if self._environ:
+            path = self._environ.getEtcdPath(self._key)
+        else:
+            path = self._repository.environ.getEtcdPath(self._key)
+        # Get value
+        return json.loads(self._repository.etcd.read(path).value)
 
     def update(self, value):
         """Update the config
