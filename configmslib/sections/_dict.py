@@ -56,8 +56,8 @@ class DictConfigSection(ReferConfigSection):
             if not value.get('database') or not value.get('collection'):
                 raise ValueError('database and collection is required')
         elif value.get('dbtype') == 'gridfs':
-            if not value.get('database') or not value.get('filename'):
-                raise ValueError('database and filename is required')
+            if not value.get('filename'):
+                raise ValueError('filename is required')
         else:
             raise ValueError('unknown dbtype')
 
@@ -258,7 +258,7 @@ class GridfsDict(DictObj):
     """
     def __init__(self, name, config, repository):
         super(GridfsDict, self).__init__(name, config, repository)
-        self.database = config['database']
+        self.database = config.get('database', 'fs)
         self.collection = config.get('collection', 'fs')
         self.filename = config['filename']
 
