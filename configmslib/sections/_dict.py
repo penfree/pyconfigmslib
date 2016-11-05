@@ -23,7 +23,7 @@ import os
 LOG = logging.getLogger("configms.sections.dict")
 
 class DictConfigSection(ReferConfigSection):
-    """DictClientConfigSection
+    """DictConfigSection
         Configs:
             - dbtype: gridfs | mongodb | elasticsearch
                 - For elasticsearch:
@@ -40,7 +40,8 @@ class DictConfigSection(ReferConfigSection):
                     - key_field: list of key field
                     - value_field: the value field, default to entire obj
                 - For kv: first column is key, second column is value, all the other columns is ignored
-            - cache_path: the dict will be cached to disk to avoid downloading everytime, only used when debug locally
+            - enable_cache: whether the dict will be cached to disk to avoid downloading everytime
+            - cache_path: cache directory, use different dir for modules
     """
     Type = 'dict'
     ReloadRequired = True
@@ -65,17 +66,24 @@ class DictConfigSection(ReferConfigSection):
             @Brief reference
             @Param config:
         """
+        return DictObj.getDict(self.key, config, self.repository)
+
+    def reload(self, config):
+        """
+            @Brief reload Disable reload, dict can only load once
+            @Param config:
+        """
         if hasattr(self, '_value') and self._value:
-            return self._value
+            return
         else:
-            return DictObj.getDict(self.key, config, self.repository)
+            super(DictConfigSection, self).reload(config)
 
     def release(self, value):
        """
            @Brief release
            @Param value:
        """
-       pass
+       self._value.value.clear()
        
 
 class DictObj(dict):
@@ -89,7 +97,12 @@ class DictObj(dict):
             self.datatype = 'json'
         else:
             self.datatype = config.get('datatype', 'json')
-        self.cache_path = config.get('cache_path')
+        self.enable_cache = config.get('enable_cache', False)
+        cache_path = config.get('cache_path', '/tmp/')
+        if not os.path.exists(cache_path):
+            os.makedirs(cache_path)
+        if cache_path:
+            self.cache_path = os.path.join(cache_path, '.cache.' + self.name)
         self._lock = Lock()
 
     @classmethod
@@ -106,7 +119,9 @@ class DictObj(dict):
         return handler
 
     def load(self):
-        """fetch dict from backend"""
+        """load dicts"""
+        # Clear old data
+        self.clear()
         # if data is cached in local disk, load it
         if self.loadCache():
             return
