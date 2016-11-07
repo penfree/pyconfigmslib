@@ -21,6 +21,7 @@ import logging
 import os
 
 LOG = logging.getLogger("configms.sections.dict")
+DEFAULT_CACHE_DIR = '/tmp/.bdmd/.dict/'
 
 class DictConfigSection(ReferConfigSection):
     """DictConfigSection
@@ -98,11 +99,11 @@ class DictObj(dict):
         else:
             self.datatype = config.get('datatype', 'json')
         self.enable_cache = config.get('enable_cache', False)
-        cache_path = config.get('cache_path', '/tmp/')
+        cache_path = config.get('cache_path', DEFAULT_CACHE_DIR)
         if not os.path.exists(cache_path):
             os.makedirs(cache_path)
         if cache_path:
-            self.cache_path = os.path.join(cache_path, '.cache.' + self.name)
+            self.cache_path = os.path.join(cache_path, self.name)
         self._lock = Lock()
 
     @classmethod
@@ -258,7 +259,7 @@ class GridfsDict(DictObj):
     """
     def __init__(self, name, config, repository):
         super(GridfsDict, self).__init__(name, config, repository)
-        self.database = config.get('database', 'fs)
+        self.database = config.get('database', 'fs')
         self.collection = config.get('collection', 'fs')
         self.filename = config['filename']
 
@@ -279,7 +280,7 @@ class GridfsDict(DictObj):
                     self[key] = value
                 else:
                     obj = json.loads(line)
-                    key, value = self.make(words)
+                    key, value = self.make(obj)
                     self[key] = value
 
             LOG.info('Loaded %d records for dict[%s]' % (count, self.name))
