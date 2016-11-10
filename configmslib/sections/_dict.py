@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#coding=utf8
+# coding=utf8
 """
 # Author: f
 # Created Time : 六 11/ 5 12:11:32 2016
@@ -26,7 +26,9 @@ LOG = logging.getLogger("configms.sections.dict")
 DEFAULT_CACHE_DIR = '/tmp/.bdmd/.dict/'
 NoDefault = object()
 
+
 class DictConfigSection(ReferConfigSection):
+
     """DictConfigSection
         Configs:
             - dbtype: gridfs | mongodb | elasticsearch
@@ -83,14 +85,15 @@ class DictConfigSection(ReferConfigSection):
             super(DictConfigSection, self).reload(config)
 
     def release(self, value):
-       """
-           @Brief release
-           @Param value:
-       """
-       self._value.value.clear()
-       
+        """
+            @Brief release
+            @Param value:
+        """
+        self._value.value.clear()
+
 
 class DictObj(dict):
+
     def __init__(self, name, config, repository):
         self.name = name
         self.config = config
@@ -171,7 +174,7 @@ class DictObj(dict):
         for value in iterfind(obj, key.split(".")):
             yield value
 
-    def getValue(self, obj, key, default = NoDefault):
+    def getValue(self, obj, key, default=NoDefault):
         """
             @Brief getValue get field from obj by key
             @Param obj:
@@ -180,7 +183,10 @@ class DictObj(dict):
         values = list(self.find(obj, key))
         if not values:
             if default == NoDefault:
-                raise ValueError('Cannot find Key[%s] in data[%s]' % (key, json.dumps(obj, ensure_ascii = False)))
+                raise ValueError(
+                    'Cannot find Key[%s] in data[%s]' %
+                    (key, json.dumps(
+                        obj, ensure_ascii=False)))
             else:
                 return default
         elif len(values) > 1:
@@ -223,7 +229,6 @@ class DictObj(dict):
             else:
                 return obj[0], obj[1]
 
-
     def loadCache(self):
         """loadCache"""
         if self.cache_path and os.path.exists(self.cache_path):
@@ -234,7 +239,9 @@ class DictObj(dict):
                     if isinstance(key, list):
                         key = tuple(key)
                     self[key] = obj['value']
-                LOG.info('dict[%s] loaded from cachefile[%s]' % (self.name, self.cache_path))
+                LOG.info(
+                    'dict[%s] loaded from cachefile[%s]' %
+                    (self.name, self.cache_path))
             return True
         return False
 
@@ -242,14 +249,17 @@ class DictObj(dict):
         if self.cache_path:
             with open(self.cache_path, 'w') as df:
                 for k, v in self.iteritems():
-                    print >>df, json.dumps({'key': k, 'value': v}, ensure_ascii = False)
+                    print >>df, json.dumps(
+                        {'key': k, 'value': v}, ensure_ascii=False)
 
 
 class ElasticDict(DictObj):
+
     """ElasticDict
         Dict stored in elasticsearch
     """
     BATCH_SIZE = 1000
+
     def __init__(self, name, config, repository):
         """
             @Brief __init__
@@ -262,13 +272,15 @@ class ElasticDict(DictObj):
 
     def fetch(self):
         fetched = 0
-        LOG.info('Loading dict[%s] from elasticsearch, [%s][%s]' % (self.name, self.index, self.doctype))
+        LOG.info(
+            'Loading dict[%s] from elasticsearch, [%s][%s]' %
+            (self.name, self.index, self.doctype))
         with self.repository[self.backend].instance() as es:
             res = es.search(
-                index = self.index,
-                doc_type = self.doctype,
-                scroll = '1m',
-                size = self.BATCH_SIZE
+                index=self.index,
+                doc_type=self.doctype,
+                scroll='1m',
+                size=self.BATCH_SIZE
                 )
             scroll_id = res['_scroll_id']
             count = 0
@@ -280,14 +292,17 @@ class ElasticDict(DictObj):
 
                 if len(res['hits']['hits']) < self.BATCH_SIZE:
                     break
-                res = es.scroll(scroll_id = scroll_id, scroll = '1m')
-            es.clear_scroll(scroll_id = scroll_id)
+                res = es.scroll(scroll_id=scroll_id, scroll='1m')
+            es.clear_scroll(scroll_id=scroll_id)
             LOG.info('Loaded %d records for dict[%s]' % (count, self.name))
 
+
 class MongoDict(DictObj):
+
     """MongoDict
         Dict stored in mongodb collection
     """
+
     def __init__(self, name, config, repository):
         super(MongoDict, self).__init__(name, config, repository)
         self.database = config['database']
@@ -304,10 +319,13 @@ class MongoDict(DictObj):
                 self[key] = value
             LOG.info('Loaded %d records for dict[%s]' % (count, self.name))
 
+
 class GridfsDict(DictObj):
+
     """GridfsDict
         Dict stored in gridfs file
     """
+
     def __init__(self, name, config, repository):
         super(GridfsDict, self).__init__(name, config, repository)
         self.database = config.get('database', 'fs')
@@ -332,7 +350,9 @@ class GridfsDict(DictObj):
         with self.repository[self.backend].instance() as client:
             fs = gridfs.GridFS(client[self.database], self.collection)
             df = fs.get_last_version(self.filename)
-            LOG.info('Loading [%s] from gridfs, uploadTime[%s], md5[%s]' % (self.filename, df.upload_date, df.md5))
+            LOG.info(
+                'Loading [%s] from gridfs, uploadTime[%s], md5[%s]' %
+                (self.filename, df.upload_date, df.md5))
             count = 0
             cache_file = None
             if self.cache_path and self.enable_cache:
@@ -350,7 +370,7 @@ class GridfsDict(DictObj):
             df.close()
 
             LOG.info('Loaded %d records for dict[%s]' % (count, self.name))
-    
+
     def loadCache(self):
         """loadCache"""
         if self.cache_path and os.path.exists(self.cache_path):
@@ -359,15 +379,21 @@ class GridfsDict(DictObj):
                 fs = gridfs.GridFS(client[self.database], self.collection)
                 df = fs.get_last_version(self.filename)
                 if df.md5 == local_md5:
-                    LOG.info('file[%s] has not changed, will use local cache dict' % self.filename)
+                    LOG.info(
+                        'file[%s] has not changed, will use local cache dict' %
+                        self.filename)
                 else:
-                    LOG.info('file[%s] has changed, local_md5:%s != remote_md5:%s' % (self.filename, local_md5, df.md5))
+                    LOG.info(
+                        'file[%s] has changed, local_md5:%s != remote_md5:%s' %
+                        (self.filename, local_md5, df.md5))
                     return False
 
             with open(self.cache_path) as df:
                 for line in df:
                     self.parseLine(line)
-                LOG.info('dict[%s] loaded from cachefile[%s]' % (self.name, self.cache_path))
+                LOG.info(
+                    'dict[%s] loaded from cachefile[%s]' %
+                    (self.name, self.cache_path))
             return True
         return False
 
