@@ -19,9 +19,12 @@ import gridfs
 import simplejson as json
 import logging
 import os
+import hashlib
+
 
 LOG = logging.getLogger("configms.sections.dict")
 DEFAULT_CACHE_DIR = '/tmp/.bdmd/.dict/'
+NoDefault = object()
 
 class DictConfigSection(ReferConfigSection):
     """DictConfigSection
@@ -124,17 +127,66 @@ class DictObj(dict):
         # Clear old data
         self.clear()
         # if data is cached in local disk, load it
-        if self.loadCache():
+        if self.enable_cache and self.loadCache():
             return
         # fetch from backend server
         with self._lock:
             self.fetch()
         # cache the fetched data
-        self.cache()
+        if self.enable_cache:
+            self.cache()
 
     def fetch(self):
         """fetch data from backend server"""
         raise NotImplementedError()
+
+    def find(self, obj, key):
+        """
+            @Brief find key in obj
+            @Param obj:
+            @Param key:
+        """
+        def iterfind(obj, names):
+            """Iterate find names in obj
+            """
+            if len(names) > 0:
+                name = names[0]
+                # Check the obj
+                if isinstance(obj, dict):
+                    # Find key in this dict
+                    if name in obj:
+                        # Good
+                        for v in iterfind(obj[name], names[1: ]):
+                            yield v
+                elif isinstance(obj, (list, tuple)):
+                    # A list or tuple, iterate item
+                    for item in obj:
+                        for v in iterfind(item, names):
+                            yield v
+                else:
+                    # Not a dict, list or tuple, stop here
+                    pass
+            else:
+                yield obj
+        for value in iterfind(obj, key.split(".")):
+            yield value
+
+    def getValue(self, obj, key, default = NoDefault):
+        """
+            @Brief getValue get field from obj by key
+            @Param obj:
+            @Param key:
+        """
+        values = list(self.find(obj, key))
+        if not values:
+            if default == NoDefault:
+                raise ValueError('Cannot find Key[%s] in data[%s]' % (key, json.dumps(obj, ensure_ascii = False)))
+            else:
+                return default
+        elif len(values) > 1:
+            raise ValueError('There is more then one value for key[%s]' % key)
+        else:
+            return values[0]
 
     def make(self, obj):
         """
@@ -151,16 +203,15 @@ class DictObj(dict):
                 raise ValueError('key_field needs to be set')
             keys = []
             for key in key_fields:
-                if key not in obj:
-                    raise ValueError('%s missed in dict data' % key)
-                keys.append(obj[key])
+                val = self.getValue(obj, key)
+                keys.append(val)
             if len(key_fields) == 1:
                 key = keys[0]
             else:
                 key = tuple(keys)
             value_field = self.config.get('value_field')
             if value_field:
-                value = obj.get(value_field)
+                value = self.getValue(obj, value_field)
             else:
                 value = obj
             return key, value
@@ -263,24 +314,87 @@ class GridfsDict(DictObj):
         self.collection = config.get('collection', 'fs')
         self.filename = config['filename']
 
+    def parseLine(self, line):
+        """
+            @Brief parseLine 解析文件的一行
+            @Param line:
+        """
+        if self.datatype == 'kv':
+            words = line.strip().split('\t')
+            key, value = self.make(words)
+            self[key] = value
+        else:
+            obj = json.loads(line)
+            key, value = self.make(obj)
+            self[key] = value
+
     def fetch(self):
         with self.repository[self.backend].instance() as client:
             fs = gridfs.GridFS(client[self.database], self.collection)
             df = fs.get_last_version(self.filename)
             LOG.info('Loading [%s] from gridfs, uploadTime[%s], md5[%s]' % (self.filename, df.upload_date, df.md5))
             count = 0
+            cache_file = None
+            if self.cache_path and self.enable_cache:
+                cache_file = open(self.cache_path, 'w')
             while True:
                 line = df.readline()
                 if not line:
                     break
                 count += 1
-                if self.datatype == 'kv':
-                    words = line.strip().split('\t')
-                    key, value = self.make(words)
-                    self[key] = value
-                else:
-                    obj = json.loads(line)
-                    key, value = self.make(obj)
-                    self[key] = value
+                self.parseLine(line)
+                if cache_file is not None:
+                    cache_file.write(line)
+            if cache_file is not None:
+                cache_file.close()
+            df.close()
 
             LOG.info('Loaded %d records for dict[%s]' % (count, self.name))
+    
+    def loadCache(self):
+        """loadCache"""
+        if self.cache_path and os.path.exists(self.cache_path):
+            local_md5 = self.md5sum(self.cache_path)
+            with self.repository[self.backend].instance() as client:
+                fs = gridfs.GridFS(client[self.database], self.collection)
+                df = fs.get_last_version(self.filename)
+                if df.md5 == local_md5:
+                    LOG.info('file[%s] has not changed, will use local cache dict' % self.filename)
+                else:
+                    LOG.info('file[%s] has changed, local_md5:%s != remote_md5:%s' % (self.filename, local_md5, df.md5))
+                    return False
+
+            with open(self.cache_path) as df:
+                for line in df:
+                    self.parseLine(line)
+                LOG.info('dict[%s] loaded from cachefile[%s]' % (self.name, self.cache_path))
+            return True
+        return False
+
+    def cache(self):
+        pass
+
+    def md5sum(self, fname):
+        """
+            @Brief md5sum 计算文件md5
+            @Param fname: 文件路径或文件流
+        """
+        def read_chunks(fh):
+            fh.seek(0)
+            chunk = fh.read(8096)
+            while chunk:
+                yield chunk
+                chunk = fh.read(8096)
+            else:
+                fh.seek(0)
+        m = hashlib.md5()
+        if isinstance(fname, basestring) and os.path.exists(fname):
+            with open(fname, "rb") as fh:
+                for chunk in read_chunks(fh):
+                    m.update(chunk)
+        elif fname.__class__.__name__ in ["StringIO", "StringO"] or isinstance(fname, file):
+            for chunk in read_chunks(fname):
+                m.update(chunk)
+        else:
+            return ""
+        return m.hexdigest()
