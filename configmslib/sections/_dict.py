@@ -95,6 +95,7 @@ class DictConfigSection(ReferConfigSection):
 class DictObj(dict):
 
     def __init__(self, name, config, repository):
+        self.md5 = None
         self.name = name
         self.config = config
         self.repository = repository
@@ -159,7 +160,7 @@ class DictObj(dict):
                     # Find key in this dict
                     if name in obj:
                         # Good
-                        for v in iterfind(obj[name], names[1: ]):
+                        for v in iterfind(obj[name], names[1:]):
                             yield v
                 elif isinstance(obj, (list, tuple)):
                     # A list or tuple, iterate item
@@ -281,7 +282,7 @@ class ElasticDict(DictObj):
                 doc_type=self.doctype,
                 scroll='1m',
                 size=self.BATCH_SIZE
-                )
+            )
             scroll_id = res['_scroll_id']
             count = 0
             while True:
@@ -353,6 +354,7 @@ class GridfsDict(DictObj):
             LOG.info(
                 'Loading [%s] from gridfs, uploadTime[%s], md5[%s]' %
                 (self.filename, df.upload_date, df.md5))
+            self.md5 = df.md5
             count = 0
             cache_file = None
             if self.cache_path and self.enable_cache:
@@ -382,6 +384,7 @@ class GridfsDict(DictObj):
                     LOG.info(
                         'file[%s] has not changed, will use local cache dict' %
                         self.filename)
+                    self.md5 = local_md5
                 else:
                     LOG.info(
                         'file[%s] has changed, local_md5:%s != remote_md5:%s' %
