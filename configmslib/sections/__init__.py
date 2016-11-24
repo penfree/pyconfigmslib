@@ -13,12 +13,14 @@ from _mongodb import MongodbConfigSection
 from _redis import RedisConfigSection
 from _hbase import HBaseConfigSection
 from _elasticsearch import ElasticsearchConfigSection
+from _dict import DictConfigSection
 
 SECTIONS = [
         MongodbConfigSection,
         RedisConfigSection,
         HBaseConfigSection,
         ElasticsearchConfigSection,
+        DictConfigSection,
         ]
 
 __all__ = [ 'SECTIONS' ]
