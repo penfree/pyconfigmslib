@@ -10,6 +10,8 @@
 """
 
 import happybase
+from thrift.transport.TTransport import TTransportException
+import time
 
 from configmslib.section import ReferConfigSection
 
@@ -92,3 +94,21 @@ class HBaseConfigSection(ReferConfigSection):
         """
         with value.connection(timeout = self.get("timeout", self.DefaultTimeout)) as connection:
             yield connection
+
+    def withinError(self, error):
+        """When error occurred in the with statements
+        """
+        self._reloadedEvent.wait()
+        self._reloadedEvent.clear()
+        config = dict(self)
+        while True:
+            try:
+                self.reload(config)
+            except Exception,e:
+                self.logger.exception(e)
+                self.logger.warn('reconnect hbase failed, wait 3s...')
+                time.sleep(3)
+            else:
+                self._reloadedEvent.set()
+                self.logger.info('reload hbase succ')
+                break
