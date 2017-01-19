@@ -23,7 +23,7 @@ import hashlib
 
 
 LOG = logging.getLogger("configms.sections.dict")
-DEFAULT_CACHE_DIR = '/tmp/.bdmd/.dict/'
+DEFAULT_CACHE_DIR = '/tmp/.bdmd/.dict'
 NoDefault = object()
 
 
@@ -92,7 +92,24 @@ class DictConfigSection(ReferConfigSection):
         self._value.value.clear()
 
 
+def ensuredirs(path, mode=None):
+    """
+        @Brief ensuredirs an alternative for os.makedirs, can change mode for all
+            directories created by this function
+        @Param path:
+        @Param mode:
+    """
+    if os.path.exists(path):
+        return
+    parent = os.path.dirname(path)
+    ensuredirs(parent, mode)
+    os.mkdir(path)
+    if mode is not None:
+        os.chmod(path, mode)
+
+
 class DictObj(dict):
+    """DictObj"""
 
     def __init__(self, name, config, repository):
         self.md5 = None
@@ -107,8 +124,10 @@ class DictObj(dict):
             self.datatype = config.get('datatype', 'json')
         self.enable_cache = config.get('enable_cache', False)
         cache_path = config.get('cache_path', DEFAULT_CACHE_DIR)
-        if not os.path.exists(cache_path):
-            os.makedirs(cache_path, 0777)
+        if cache_path == DEFAULT_CACHE_DIR:
+            ensuredirs(cache_path, 0o777)
+        else:
+            ensuredirs(cache_path)
         if cache_path:
             self.cache_path = os.path.join(cache_path, self.name)
         self._lock = Lock()
