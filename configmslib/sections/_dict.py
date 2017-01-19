@@ -108,7 +108,7 @@ class DictObj(dict):
         self.enable_cache = config.get('enable_cache', False)
         cache_path = config.get('cache_path', DEFAULT_CACHE_DIR)
         if not os.path.exists(cache_path):
-            os.makedirs(cache_path)
+            os.makedirs(cache_path, 0777)
         if cache_path:
             self.cache_path = os.path.join(cache_path, self.name)
         self._lock = Lock()
