@@ -10,7 +10,6 @@
 """
 
 import happybase
-from thrift.transport.TTransport import TTransportException
 import time
 
 from configmslib.section import ReferConfigSection
