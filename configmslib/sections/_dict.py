@@ -252,6 +252,7 @@ class DictObj(dict):
                 for k, v in self.iteritems():
                     print >>df, json.dumps(
                         {'key': k, 'value': v}, ensure_ascii=False)
+            os.chmod(self.cache_path, 0o777)
 
 
 class ElasticDict(DictObj):
@@ -369,6 +370,7 @@ class GridfsDict(DictObj):
                     cache_file.write(line)
             if cache_file is not None:
                 cache_file.close()
+                os.chmod(self.cache_path, 0o777)
             df.close()
 
             LOG.info('Loaded %d records for dict[%s]' % (count, self.name))
