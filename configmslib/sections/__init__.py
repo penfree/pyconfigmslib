@@ -14,6 +14,7 @@ from _redis import RedisConfigSection
 from _hbase import HBaseConfigSection
 from _elasticsearch import ElasticsearchConfigSection
 from _dict import DictConfigSection
+from _hdfs import HDFSConfigSection
 
 SECTIONS = [
         MongodbConfigSection,
@@ -21,6 +22,7 @@ SECTIONS = [
         HBaseConfigSection,
         ElasticsearchConfigSection,
         DictConfigSection,
+        HDFSConfigSection
         ]
 
 __all__ = [ 'SECTIONS' ]
