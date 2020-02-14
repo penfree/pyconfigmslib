@@ -7,3 +7,4 @@ happybase
 python-etcd
 hdfs3
 pykerberos
+thriftpy2
