@@ -52,7 +52,7 @@ class HBaseConfigSection(ReferConfigSection):
                 config.get("compat"), \
                 config.get("transport"), \
                 config.get("protocol"), \
-                config.get("poolSize", self.DefaultPoolSize),
+                config.get("poolSize", self.DefaultPoolSize), \
                 config.get('useKerberos', False)
         # Create the params
         params = { "host": host }
