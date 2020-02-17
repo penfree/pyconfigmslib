@@ -13,6 +13,7 @@ import happybase
 import time
 
 from configmslib.section import ReferConfigSection
+from happybase_krb_patch import KerberosConnectionPool, KerberosConnection
 
 class HBaseConfigSection(ReferConfigSection):
     """The hbase config section
@@ -25,6 +26,7 @@ class HBaseConfigSection(ReferConfigSection):
         - compat                The compatibility level
         - transport             The transport mode
         - protocol              The protocol mode
+        - useKerberos          Whether to use kerberos
     """
     Type = "hbase"
     ReloadRequired = True
@@ -41,7 +43,7 @@ class HBaseConfigSection(ReferConfigSection):
     def reference(self, config):
         """Get the referenced connection
         """
-        host, port, timeout, tablePrefix, tablePrefixSeparator, compat, transport, protocol, poolSize = \
+        host, port, timeout, tablePrefix, tablePrefixSeparator, compat, transport, protocol, poolSize, use_kerberos = \
                 config["host"], \
                 config.get("port", 9090), \
                 config.get("timeout", self.DefaultTimeout), \
@@ -50,7 +52,8 @@ class HBaseConfigSection(ReferConfigSection):
                 config.get("compat"), \
                 config.get("transport"), \
                 config.get("protocol"), \
-                config.get("poolSize", self.DefaultPoolSize)
+                config.get("poolSize", self.DefaultPoolSize), \
+                config.get('useKerberos', False)
         # Create the params
         params = { "host": host }
         if port:
@@ -69,7 +72,10 @@ class HBaseConfigSection(ReferConfigSection):
             params["protocol"] = protocol
         self.logger.info("[%s] Connecting to hbase with host [%s] port [%s]", self.Type, host, port)
         # Create the connection pool
-        return happybase.ConnectionPool(size = poolSize, **params)
+        if use_kerberos:
+            return KerberosConnectionPool(size=poolSize, use_kerberos=True, **params)
+        else:
+            return happybase.ConnectionPool(size = poolSize, **params)
 
     def release(self, value):
         """Release the reference
