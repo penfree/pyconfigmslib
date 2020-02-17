@@ -13,7 +13,6 @@ import happybase
 import time
 
 from configmslib.section import ReferConfigSection
-from happybase_krb_patch import KerberosConnectionPool, KerberosConnection
 
 class HBaseConfigSection(ReferConfigSection):
     """The hbase config section
@@ -73,6 +72,7 @@ class HBaseConfigSection(ReferConfigSection):
         self.logger.info("[%s] Connecting to hbase with host [%s] port [%s]", self.Type, host, port)
         # Create the connection pool
         if use_kerberos:
+            from happybase_krb_patch import KerberosConnectionPool, KerberosConnection
             return KerberosConnectionPool(size=poolSize, use_kerberos=True, **params)
         else:
             return happybase.ConnectionPool(size = poolSize, **params)
