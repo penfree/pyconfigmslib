@@ -32,7 +32,7 @@ class HDFSConfigSection(ReferConfigSection):
             for host in value.get('hosts'):
                 if not host.get('host'):
                     raise ValueError('host required')
-    
+
     def reference(self, config):
         '''
             Create hdfs connection
@@ -40,10 +40,12 @@ class HDFSConfigSection(ReferConfigSection):
         host = ''
         port = None
         pars = {}
+        if os.environ.get('USE_KERBEROS') == '1':
+            pars['hadoop.security.authentication'] = 'kerberos'
         if len(config.get('hosts')) > 1:
             # HA mode
             host = 'nn'
-            pars = {'dfs.nameservices': 'nn'}
+            pars['dfs.nameservices'] = 'nn'
             namenodes = []
             for idx, item in enumerate(config['hosts'], start=1):
                 namenodes.append('nn%d' % idx)
