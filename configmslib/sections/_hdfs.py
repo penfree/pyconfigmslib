@@ -9,6 +9,7 @@ reload(sys)
 sys.setdefaultencoding('utf-8')
 
 from configmslib.section import ReferConfigSection
+import os
 
 class HDFSConfigSection(ReferConfigSection):
     '''
